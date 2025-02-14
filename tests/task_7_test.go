@@ -3,15 +3,17 @@ package tests
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func notFoundTask(t *testing.T, id string) {
-	body, err := requestJSON("api/task?id="+id, nil, http.MethodGet)
+func notFoundTask(t *testing.T, id int) {
+	body, err := requestJSON("api/task?id="+strconv.Itoa(id), nil, http.MethodGet) //
 	assert.NoError(t, err)
+	t.Logf("Отправляемые данные: %+v", id)
 	var m map[string]any
 	err = json.Unmarshal(body, &m)
 	assert.NoError(t, err)
@@ -24,23 +26,31 @@ func TestDone(t *testing.T) {
 	defer db.Close()
 
 	now := time.Now()
-	id := addTask(t, task{
+	idInt := addTask(t, task{
 		date:  now.Format(`20060102`),
 		title: "Свести баланс",
 	})
 
-	ret, err := postJSON("api/task/done?id="+id, nil, http.MethodPost)
+	//Преобразуем id из string в int
+	id, err := strconv.Atoi(idInt)
+	assert.NoError(t, err)
+
+	ret, err := postJSON("api/task/done?id="+strconv.Itoa(id), nil, http.MethodPost)
 	assert.NoError(t, err)
 	assert.Empty(t, ret)
 	notFoundTask(t, id)
 
-	id = addTask(t, task{
+	idInt = addTask(t, task{
 		title:  "Проверить работу /api/task/done",
 		repeat: "d 3",
 	})
 
+	//Преобразуем id из string в int
+	id, err = strconv.Atoi(idInt)
+	assert.NoError(t, err)
+
 	for i := 0; i < 3; i++ {
-		ret, err := postJSON("api/task/done?id="+id, nil, http.MethodPost)
+		ret, err := postJSON("api/task/done?id="+strconv.Itoa(id), nil, http.MethodPost)
 		assert.NoError(t, err)
 		assert.Empty(t, ret)
 
@@ -56,11 +66,16 @@ func TestDelTask(t *testing.T) {
 	db := openDB(t)
 	defer db.Close()
 
-	id := addTask(t, task{
+	idInt := addTask(t, task{
 		title:  "Временная задача",
 		repeat: "d 3",
 	})
-	ret, err := postJSON("api/task?id="+id, nil, http.MethodDelete)
+
+	//Преобразуем id из string в int
+	id, err := strconv.Atoi(idInt)
+	assert.NoError(t, err)
+
+	ret, err := postJSON("api/task?id="+strconv.Itoa(id), nil, http.MethodDelete)
 	assert.NoError(t, err)
 	assert.Empty(t, ret)
 

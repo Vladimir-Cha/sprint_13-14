@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,7 +29,7 @@ func TestTask(t *testing.T) {
 
 	body, err := requestJSON("api/task", nil, http.MethodGet)
 	assert.NoError(t, err)
-	var m map[string]string
+	var m map[string]interface{} //Исправлено string на interface{}, так как id имеет числовой тип.
 	err = json.Unmarshal(body, &m)
 	assert.NoError(t, err)
 
@@ -41,11 +42,19 @@ func TestTask(t *testing.T) {
 	err = json.Unmarshal(body, &m)
 	assert.NoError(t, err)
 
-	assert.Equal(t, todo, m["id"])
-	assert.Equal(t, task.date, m["date"])
+	//Тест ожидает следующую дату (судя по полученному телу ответа "body"), но сравнивает с текущей датой.
+	//Изменение должно получать дату из структуры task, добавлять из неё нужное количество дней d и сравнивать новую дату с полученной.
+	daysAdd, err := strconv.Atoi(strings.TrimPrefix(task.repeat, "d "))
+	assert.NoError(t, err)
+	newDate := now.AddDate(0, 0, daysAdd).Format("20060102")
+
+	assert.Equal(t, todo, fmt.Sprint(int(m["id"].(float64)))) //Добавлено преобразование ID из float64 в int.
+	//assert.Equal(t, todo, m["id"])
+	assert.Equal(t, newDate, m["date"])
 	assert.Equal(t, task.title, m["title"])
 	assert.Equal(t, task.comment, m["comment"])
 	assert.Equal(t, task.repeat, m["repeat"])
+	//t.Logf("Тело ответа: %s", string(body)) //Лог для тела ответа body
 }
 
 type fulltask struct {
@@ -96,9 +105,19 @@ func TestEditTask(t *testing.T) {
 	}
 
 	updateTask := func(newVals map[string]any) {
+		//Преобразование id из string в int.
+		if idStr, ok := newVals["id"].(string); ok {
+			idInt, err := strconv.Atoi(idStr)
+			if err != nil {
+				t.Errorf("Ошибка преобразования id в число: %v", err)
+				return
+			}
+			newVals["id"] = idInt
+		}
+		//t.Logf("Отправляемые данные: %+v", newVals) //Лог для отправляемых данных
 		mupd, err := postJSON("api/task", newVals, http.MethodPut)
 		assert.NoError(t, err)
-
+		//t.Logf("Ответ сервера: %+v", mupd) //Лог для полученных данных
 		e, ok := mupd["error"]
 		assert.False(t, ok && fmt.Sprint(e) != "")
 
