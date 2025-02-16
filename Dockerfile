@@ -35,7 +35,7 @@ EXPOSE 7540
 
 ENV TODO_PASSWORD=12345
 
-ENV TODO_DBFILE=./data/scheduler.db
+ENV TODO_DBFILE=.project/data/scheduler.db
 
 # Запускаем приложение
 CMD ["./my_app"]
