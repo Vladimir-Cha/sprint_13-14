@@ -68,6 +68,13 @@ func createDatabase(dbFile string) error {
 		return fmt.Errorf("ошибка при создании таблицы: %w", err)
 	}
 
+	// Создаем индекс на поле date
+	createIndexSQL := `CREATE INDEX IF NOT EXISTS idx_date ON scheduler(date);`
+	_, err = db.Exec(createIndexSQL)
+	if err != nil {
+		return fmt.Errorf("ошибка при создании индекса: %w", err)
+	}
+
 	fmt.Println("База данных, таблица scheduler и индекс успешно созданы.")
 
 	// Проверка наличия файла

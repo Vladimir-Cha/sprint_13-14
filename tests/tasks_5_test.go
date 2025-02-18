@@ -24,7 +24,7 @@ func addTask(t *testing.T, task task) string {
 	return id
 }
 
-func getTasks(t *testing.T, search string) []map[string]interface{} { //Исправлено string на interface{}, так как id имеет числовой тип. Структура теста её читала как строку.
+func getTasks(t *testing.T, search string) []map[string]string {
 	url := "api/tasks"
 	if Search {
 		url += "?search=" + search
@@ -32,9 +32,7 @@ func getTasks(t *testing.T, search string) []map[string]interface{} { //Испр
 	body, err := requestJSON(url, nil, http.MethodGet)
 	assert.NoError(t, err)
 
-	//t.Logf("Тело ответа: %s", string(body)) //Функция для логирования. Проверка мапы с addTask.
-
-	var m map[string][]map[string]interface{}
+	var m map[string][]map[string]string
 	err = json.Unmarshal(body, &m)
 	assert.NoError(t, err)
 	return m["tasks"]

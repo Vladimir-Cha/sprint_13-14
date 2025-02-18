@@ -31,7 +31,7 @@ RUN apk add --no-cache sqlite
 COPY --from=builder /my_app .
 
 # Открываем порт
-EXPOSE 7540
+EXPOSE $TODO_PORT
 
 ENV TODO_PASSWORD=12345
 

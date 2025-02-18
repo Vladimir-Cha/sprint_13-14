@@ -9,11 +9,16 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+var password string
+
+func InitAuth(pass string) {
+	password = pass
+}
+
 func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Получаем пароль из переменной окружения
-		pass := os.Getenv("TODO_PASSWORD")
-		if len(pass) > 0 {
+		if len(password) > 0 {
 			var jwtToken string
 
 			// Получаем токен из куки
@@ -23,10 +28,10 @@ func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 
 			// Проверяем токен
-			valid := validateJWT(jwtToken, pass)
+			valid := validateJWT(jwtToken, password)
 			if !valid {
 				// Возвращаем ошибку 401, если токен невалиден
-				http.Error(w, "Authentification required", http.StatusUnauthorized)
+				http.Error(w, "требуется аутентификация", http.StatusUnauthorized)
 				return
 			}
 		}
@@ -87,7 +92,7 @@ func SignInHandler(w http.ResponseWriter, r *http.Request) {
 	password := os.Getenv("TODO_PASSWORD")
 	if password == "" {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(SignInResponse{Error: "Authentication not configured"})
+		json.NewEncoder(w).Encode(SignInResponse{Error: "Аутентификация не настроена"})
 		return
 	}
 
@@ -108,7 +113,7 @@ func SignInHandler(w http.ResponseWriter, r *http.Request) {
 	tokenString, err := token.SignedString([]byte(password))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(SignInResponse{Error: "Failed to generate token"})
+		json.NewEncoder(w).Encode(SignInResponse{Error: "Ошибка генерации токена"})
 		return
 	}
 

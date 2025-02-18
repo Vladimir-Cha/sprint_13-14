@@ -4,12 +4,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"project/dbopen"
-	"project/tasks"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Vladimir-Cha/sprint_13-14/project/project/dbopen"
+	"github.com/Vladimir-Cha/sprint_13-14/project/project/tasks"
+
+	"github.com/jmoiron/sqlx"
 )
+
+const dateFormat = "20060102"
+
+var db *sqlx.DB
+
+func InitDB() {
+	db = dbopen.DB()
+}
 
 // GetNextDate возвращает следующую дату выполнения задачи
 func GetNextDate(w http.ResponseWriter, r *http.Request) {
@@ -19,15 +30,17 @@ func GetNextDate(w http.ResponseWriter, r *http.Request) {
 	nowStr := r.URL.Query().Get("now")
 
 	// Парсим текущую дату
-	now, err := time.Parse("20060102", nowStr)
+	now, err := time.Parse(dateFormat, nowStr)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		response := map[string]string{"error": "Invalid 'now' parameter"}
+		response := map[string]string{"error": "неверный 'now' параметр"}
 		jsonResponse, _ := json.Marshal(response)
 		w.Write(jsonResponse)
 		return
 	}
+
+	//fmt.Printf("GetNextDate: date=%s, repeat=%s, now=%s\n", date, repeat, now.Format(dateFormat))
 
 	// Вычисляем следующую дату
 	nextDate, err := calculateNextDateFromRule(date, repeat, now)
@@ -47,12 +60,10 @@ func GetNextDate(w http.ResponseWriter, r *http.Request) {
 
 // NextDate вычисляет следующую дату для задачи
 func NextDate(taskID int, now time.Time) (string, error) {
-	db := dbopen.DB()
-	defer db.Close()
 
 	// Чтение текущей задачи из базы данных
 	var task tasks.Task
-	err := db.Get(&task, `SELECT * FROM scheduler WHERE id=?`, taskID)
+	err := db.Get(&task, `SELECT id, date, title, comment, repeat FROM scheduler WHERE id=?`, taskID)
 	if err != nil {
 		return "", err
 	}
@@ -83,105 +94,135 @@ func NextDate(taskID int, now time.Time) (string, error) {
 
 // calculateNextDateFromRule обрабатывает правило вычисления следующей даты
 func calculateNextDateFromRule(date, repeat string, now time.Time) (string, error) {
-	taskDate, err := time.Parse("20060102", date)
+	taskDate, err := time.Parse(dateFormat, date)
 	if err != nil {
-		return "", fmt.Errorf("invalid date format")
+		return "", fmt.Errorf("неверный формат даты")
 	}
 
 	switch {
-	case strings.HasPrefix(repeat, "d "):
+	case strings.HasPrefix(repeat, "d "): // Повторение через N дней
 		days, err := strconv.Atoi(repeat[2:])
 		if err != nil {
-			return "", fmt.Errorf("invalid days value")
+			return "", fmt.Errorf("недопустимое значение дней")
 		}
-		if days > 400 {
-			return "", fmt.Errorf("days value exceeds maximum")
+		if days < 1 || days > 400 {
+			return "", fmt.Errorf("количество дней должно быть от 1 до 400")
 		}
-		nextDate := taskDate.AddDate(0, 0, days)
-		fmt.Printf("Task date: %s, Days to add: %d, Next date: %s\n", taskDate.Format("20060102"), days, nextDate.Format("20060102"))
-		return nextDate.Format("20060102"), nil
 
-	case repeat == "y":
-		nextDate := taskDate.AddDate(1, 0, 0)
-		return nextDate.Format("20060102"), nil
+		// Вычисляем следующую дату
+		nextDate := taskDate
+		for {
+			nextDate = nextDate.AddDate(0, 0, days)
+			if nextDate.After(now) {
+				break
+			}
+		}
+		return nextDate.Format(dateFormat), nil
 
-	case strings.HasPrefix(repeat, "w "):
+	case repeat == "y": // Ежегодное повторение
+		nextDate := taskDate
+		for {
+			nextDate = nextDate.AddDate(1, 0, 0)
+			// Если дата - 29 февраля, а следующий год не високосный, переносим на 1 марта
+			if nextDate.Month() == time.February && nextDate.Day() == 29 && IsLeapYear(nextDate.Year()) {
+				nextDate = nextDate.AddDate(0, 0, 1) // Переносим на 1 марта
+			}
+			if nextDate.After(now) {
+				break
+			}
+		}
+		return nextDate.Format(dateFormat), nil
+
+	case strings.HasPrefix(repeat, "w "): // Повторение по дням недели
 		daysOfWeek := strings.Split(repeat[2:], ",")
-		return calculateNextWeekDate(taskDate, daysOfWeek)
+		return calculateNextWeekDate(taskDate, daysOfWeek, now)
 
-	case strings.HasPrefix(repeat, "m "):
+	case strings.HasPrefix(repeat, "m "): // Повторение по дням месяца
 		parts := strings.Split(repeat[2:], " ")
 		daysOfMonth := strings.Split(parts[0], ",")
 		var months []string
 		if len(parts) > 1 {
 			months = strings.Split(parts[1], ",")
 		}
-		return calculateNextMonthDate(taskDate, daysOfMonth, months)
+		return calculateNextMonthDate(taskDate, daysOfMonth, months, now)
 
 	default:
-		return "", fmt.Errorf("unsupported repeat rule")
+		return "", fmt.Errorf("некорректное правило повторения")
 	}
+}
+
+// Проверка на високосный год
+func IsLeapYear(year int) bool {
+	return (year%4 == 0 && year%100 != 0) || year%400 == 0
 }
 
 // calculateNextWeekDate вычисляет следующую дату по дням недели
-func calculateNextWeekDate(taskDate time.Time, daysOfWeek []string) (string, error) {
-	for _, dayStr := range daysOfWeek {
-		day, err := strconv.Atoi(dayStr)
-		if err != nil || day < 1 || day > 7 {
-			return "", fmt.Errorf("invalid day of week")
-		}
-
+func calculateNextWeekDate(taskDate time.Time, daysOfWeek []string, now time.Time) (string, error) {
+	for {
+		taskDate = taskDate.AddDate(0, 0, 1) // Переходим к следующему дню
 		currentWeekday := int(taskDate.Weekday())
 		if currentWeekday == 0 {
-			currentWeekday = 7
-		}
-		diff := day - currentWeekday
-		if diff <= 0 {
-			diff += 7
+			currentWeekday = 7 // Воскресенье
 		}
 
-		nextDate := taskDate.AddDate(0, 0, diff)
-		return nextDate.Format("20060102"), nil
+		for _, dayStr := range daysOfWeek {
+			day, err := strconv.Atoi(dayStr)
+			if err != nil || day < 1 || day > 7 {
+				return "", fmt.Errorf("неверный день недели")
+			}
+
+			if currentWeekday == day && (taskDate.After(now) || taskDate.Equal(now)) {
+				return taskDate.Format(dateFormat), nil
+			}
+		}
 	}
-	return "", fmt.Errorf("no valid day of week")
 }
 
 // calculateNextMonthDate вычисляет следующую дату по дням месяца
-func calculateNextMonthDate(taskDate time.Time, daysOfMonth []string, months []string) (string, error) {
+func calculateNextMonthDate(taskDate time.Time, daysOfMonth []string, months []string, now time.Time) (string, error) {
 	for {
 		taskDate = taskDate.AddDate(0, 0, 1)
 		day := taskDate.Day()
 		month := int(taskDate.Month())
 
+		// Проверяем, подходит ли день месяца
 		dayMatch := false
 		for _, dayStr := range daysOfMonth {
-			dayInt, err := strconv.Atoi(dayStr)
-			if err != nil {
-				continue
-			}
-			if dayInt == day || (dayStr == "-1" && day == lastDayOfMonth(taskDate)) || (dayStr == "-2" && day == lastDayOfMonth(taskDate)-1) {
-				dayMatch = true
-				break
+			if dayStr == "-1" {
+				if day == lastDayOfMonth(taskDate) {
+					dayMatch = true
+					break
+				}
+			} else if dayStr == "-2" {
+				if day == lastDayOfMonth(taskDate)-1 {
+					dayMatch = true
+					break
+				}
+			} else {
+				dayInt, err := strconv.Atoi(dayStr)
+				if err == nil && dayInt == day {
+					dayMatch = true
+					break
+				}
 			}
 		}
 
+		// Проверяем, подходит ли месяц
 		monthMatch := true
 		if len(months) > 0 {
 			monthMatch = false
 			for _, monthStr := range months {
 				monthInt, err := strconv.Atoi(monthStr)
-				if err != nil {
-					continue
-				}
-				if monthInt == month {
+				if err == nil && monthInt == month {
 					monthMatch = true
 					break
 				}
 			}
 		}
 
-		if dayMatch && monthMatch {
-			return taskDate.Format("20060102"), nil
+		// Если день и месяц подходят, и дата после текущей, возвращаем её
+		if dayMatch && monthMatch && (taskDate.After(now) || taskDate.Equal(now)) {
+			return taskDate.Format(dateFormat), nil
 		}
 	}
 }
