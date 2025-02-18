@@ -17,7 +17,7 @@ func InitAuth(pass string) {
 
 func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Получаем пароль из переменной окружения
+		// Проверяем наличие пароля
 		if len(password) > 0 {
 			var jwtToken string
 
