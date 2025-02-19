@@ -18,14 +18,10 @@ COPY project/ .
 RUN go build -o /my_app main.go
 
 # Создаем финальный образ
-FROM golang:1.23-alpine
+FROM alpine:latest
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
-
-# Устанавливаем зависимость с sqlite
-RUN apk update && apk upgrade
-RUN apk add --no-cache sqlite
 
 # Копируем скомпилированное приложение из предыдущего образа
 COPY --from=builder /my_app .

@@ -15,7 +15,7 @@ func InitAuth(pass string) {
 	password = pass
 }
 
-func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+func (h *Handlers) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Проверяем наличие пароля
 		if len(password) > 0 {
@@ -78,7 +78,7 @@ type SignInResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
-func SignInHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) SignInHandler(w http.ResponseWriter, r *http.Request) {
 	// Парсим JSON из тела запроса
 	var req SignInRequest
 	err := json.NewDecoder(r.Body).Decode(&req)

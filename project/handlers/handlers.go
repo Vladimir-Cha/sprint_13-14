@@ -2,23 +2,36 @@ package handlers
 
 import (
 	"github.com/gorilla/mux"
+	"github.com/jmoiron/sqlx"
 )
 
-// RegisterHandlers регистрирует все обработчики API
-func RegisterHandlers(r *mux.Router) {
-	r.HandleFunc("/api/tasks", GetTasks).Methods("GET")
-	r.HandleFunc("/api/task", GetTaskByID).Methods("GET")
-	r.HandleFunc("/api/task", UpdateTask).Methods("PUT")
-	r.HandleFunc("/api/task", DeleteTask).Methods("DELETE")
-	r.HandleFunc("/api/nextdate", GetNextDate).Methods("GET")
-	r.HandleFunc("/api/task", CreateTask).Methods("POST")
-	r.HandleFunc("/api/task/done", MarkTaskAsDone).Methods("POST")
+type Handlers struct {
+	db *sqlx.DB
+}
 
-	r.HandleFunc("/api/signin", SignInHandler).Methods("POST")
-	r.HandleFunc("/api/task", AuthMiddleware(CreateTask)).Methods("POST")
-	r.HandleFunc("/api/task", AuthMiddleware(GetTaskByID)).Methods("GET")
-	r.HandleFunc("/api/task", AuthMiddleware(UpdateTask)).Methods("PUT")
-	r.HandleFunc("/api/task", AuthMiddleware(DeleteTask)).Methods("DELETE")
-	r.HandleFunc("/api/tasks", AuthMiddleware(GetTasks)).Methods("GET")
-	r.HandleFunc("/api/task/done", AuthMiddleware(MarkTaskAsDone)).Methods("POST")
+func NewHandlers(db *sqlx.DB) *Handlers {
+	return &Handlers{db: db}
+}
+
+func (h *Handlers) InitAuth(pass string) {
+	password = pass
+}
+
+// RegisterHandlers регистрирует все обработчики API
+func (h *Handlers) RegisterHandlers(r *mux.Router) {
+	r.HandleFunc("/api/tasks", h.GetTasks).Methods("GET")
+	r.HandleFunc("/api/task", h.GetTaskByID).Methods("GET")
+	r.HandleFunc("/api/task", h.UpdateTask).Methods("PUT")
+	r.HandleFunc("/api/task", h.DeleteTask).Methods("DELETE")
+	r.HandleFunc("/api/nextdate", h.GetNextDate).Methods("GET")
+	r.HandleFunc("/api/task", h.CreateTask).Methods("POST")
+	r.HandleFunc("/api/task/done", h.MarkTaskAsDone).Methods("POST")
+
+	r.HandleFunc("/api/signin", h.SignInHandler).Methods("POST")
+	r.HandleFunc("/api/task", h.AuthMiddleware(h.CreateTask)).Methods("POST")
+	r.HandleFunc("/api/task", h.AuthMiddleware(h.GetTaskByID)).Methods("GET")
+	r.HandleFunc("/api/task", h.AuthMiddleware(h.UpdateTask)).Methods("PUT")
+	r.HandleFunc("/api/task", h.AuthMiddleware(h.DeleteTask)).Methods("DELETE")
+	r.HandleFunc("/api/tasks", h.AuthMiddleware(h.GetTasks)).Methods("GET")
+	r.HandleFunc("/api/task/done", h.AuthMiddleware(h.MarkTaskAsDone)).Methods("POST")
 }

@@ -8,22 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Vladimir-Cha/sprint_13-14/project/project/dbopen"
 	"github.com/Vladimir-Cha/sprint_13-14/project/project/tasks"
-
-	"github.com/jmoiron/sqlx"
 )
 
 const dateFormat = "20060102"
 
-var db *sqlx.DB
-
-func InitDB() {
-	db = dbopen.DB()
-}
-
 // GetNextDate возвращает следующую дату выполнения задачи
-func GetNextDate(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetNextDate(w http.ResponseWriter, r *http.Request) {
 	// Получаем параметры из запроса
 	date := r.URL.Query().Get("date")
 	repeat := r.URL.Query().Get("repeat")
@@ -59,18 +50,17 @@ func GetNextDate(w http.ResponseWriter, r *http.Request) {
 }
 
 // NextDate вычисляет следующую дату для задачи
-func NextDate(taskID int, now time.Time) (string, error) {
-
+func (h *Handlers) NextDate(taskID int, now time.Time) (string, error) {
 	// Чтение текущей задачи из базы данных
 	var task tasks.Task
-	err := db.Get(&task, `SELECT id, date, title, comment, repeat FROM scheduler WHERE id=?`, taskID)
+	err := h.db.Get(&task, `SELECT id, date, title, comment, repeat FROM scheduler WHERE id=?`, taskID)
 	if err != nil {
 		return "", err
 	}
 
 	// Если поле повторения пустое, удаляем задачу из базы данных
 	if task.Repeat == "" {
-		_, err = db.Exec("DELETE FROM scheduler WHERE id=?", taskID)
+		_, err = h.db.Exec("DELETE FROM scheduler WHERE id=?", taskID)
 		if err != nil {
 			return "", err
 		}
@@ -84,7 +74,7 @@ func NextDate(taskID int, now time.Time) (string, error) {
 	}
 
 	// Обновляем задачу в базе данных с новой датой
-	_, err = db.Exec("UPDATE scheduler SET date=? WHERE id=?", nextDate, taskID)
+	_, err = h.db.Exec("UPDATE scheduler SET date=? WHERE id=?", nextDate, taskID)
 	if err != nil {
 		return "", err
 	}
@@ -124,7 +114,7 @@ func calculateNextDateFromRule(date, repeat string, now time.Time) (string, erro
 		for {
 			nextDate = nextDate.AddDate(1, 0, 0)
 			// Если дата - 29 февраля, а следующий год не високосный, переносим на 1 марта
-			if nextDate.Month() == time.February && nextDate.Day() == 29 && IsLeapYear(nextDate.Year()) {
+			if nextDate.Month() == time.February && nextDate.Day() == 29 && !IsLeapYear(nextDate.Year()) {
 				nextDate = nextDate.AddDate(0, 0, 1) // Переносим на 1 марта
 			}
 			if nextDate.After(now) {
@@ -171,7 +161,7 @@ func calculateNextWeekDate(taskDate time.Time, daysOfWeek []string, now time.Tim
 				return "", fmt.Errorf("неверный день недели")
 			}
 
-			if currentWeekday == day && (taskDate.After(now) || taskDate.Equal(now)) {
+			if currentWeekday == day && taskDate.After(now) {
 				return taskDate.Format(dateFormat), nil
 			}
 		}
@@ -180,6 +170,16 @@ func calculateNextWeekDate(taskDate time.Time, daysOfWeek []string, now time.Tim
 
 // calculateNextMonthDate вычисляет следующую дату по дням месяца
 func calculateNextMonthDate(taskDate time.Time, daysOfMonth []string, months []string, now time.Time) (string, error) {
+	// Проверяем дни месяца на корректность
+	for _, dayStr := range daysOfMonth {
+		if dayStr != "-1" && dayStr != "-2" {
+			day, err := strconv.Atoi(dayStr)
+			if err != nil || day < 1 || day > 31 {
+				return "", fmt.Errorf("неверный день месяца")
+			}
+		}
+	}
+
 	for {
 		taskDate = taskDate.AddDate(0, 0, 1)
 		day := taskDate.Day()
