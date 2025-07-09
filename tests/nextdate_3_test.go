@@ -77,3 +77,13 @@ func TestNextDate(t *testing.T) {
 	}
 	check()
 }
+
+func IsLeapYear(year int) bool {
+	return (year%4 == 0 && year%100 != 0) || year%400 == 0
+}
+func TestIsLeapYear(t *testing.T) {
+	assert.True(t, IsLeapYear(2020))  // Високосный
+	assert.False(t, IsLeapYear(2021)) // Не високосный
+	assert.False(t, IsLeapYear(1900)) // Не високосный (делится на 100, но не на 400)
+	assert.True(t, IsLeapYear(2000))  // Високосный (делится на 400)
+}
